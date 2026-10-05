@@ -168,13 +168,21 @@ AgentCraft is built to point at code you care about.
 **You need:** Windows 10 or 11, or macOS, Java 25, Node 22+, git, and a copy of
 Minecraft: Java Edition.
 
-**For the real agents** you need Claude API access, either of these:
+**For the real agents** you need either Claude or Cursor API access:
+
+**Claude** (`--backend claude`, the default):
 
 - `ANTHROPIC_API_KEY`: create a key at [console.anthropic.com](https://console.anthropic.com), then
   `setx ANTHROPIC_API_KEY sk-ant-...` and open a new terminal.
 - A cloud provider supported by the Agent SDK: Amazon Bedrock (`CLAUDE_CODE_USE_BEDROCK=1`), Google
   Vertex AI (`CLAUDE_CODE_USE_VERTEX=1`) or Microsoft Foundry (`CLAUDE_CODE_USE_FOUNDRY=1`), with that
   provider's usual credentials.
+
+**Cursor** (`--backend cursor`):
+
+- `CURSOR_API_KEY`: create a key at [Cursor Dashboard → Integrations](https://cursor.com/dashboard/integrations),
+  then `setx CURSOR_API_KEY cursor_...` and open a new terminal.
+- Optional dependency `@cursor/sdk` is installed with `foreman/` npm deps when available.
 
 Then:
 
@@ -183,7 +191,8 @@ git clone https://github.com/blendi-remade/agentcraft
 cd agentcraft
 
 tools\launch.ps1 -Backend sim                    # try it first: a simulated team, no API usage
-tools\launch.ps1 -Repo C:\path\to\your\repo      # real agents on your repo
+tools\launch.ps1 -Repo C:\path\to\your\repo      # real Claude agents on your repo
+tools\launch.ps1 -Backend cursor -Repo C:\path\to\your\repo  # Cursor SDK agents
 tools\stop.ps1                                   # stop everything launch.ps1 started
 ```
 
@@ -194,13 +203,14 @@ On macOS, install Java 25 with `brew install openjdk@25`, then run from the chec
 node tools/mac.mjs launch --backend sim                 # try the studio without API usage
 node tools/mac.mjs stop --profile sim
 node tools/mac.mjs launch --repo /path/to/your/repo --use-claude-login
+node tools/mac.mjs launch --backend cursor --repo /path/to/your/repo
 node tools/mac.mjs stop
 ```
 
 The macOS launcher installs npm dependencies on first run, downloads Minecraft and Fabric
 through Gradle, starts the Foreman and game in the background, and waits for the studio world.
 Use `--dev` for a muted client that does not take focus; `--no-game` starts only the Foreman.
-See [tools/README.md](tools/README.md) for options and logs.
+See [tools/README.md](tools/README.md) for options and logs. Cursor backend setup: [docs/cursor-backend.md](docs/cursor-backend.md).
 
 The first launch installs npm dependencies and lets Gradle download Minecraft and Fabric, which
 takes a few minutes. After that, a launch reaches the studio in under a minute. The HQ builds itself

@@ -20,6 +20,7 @@ Minecraft is closed, and survives restarts.
      |- Notifier      src/notifier.ts    desktop notification + console bell when you are needed
      |- Store         src/store.ts       atomic JSON state + JSONL logs under AGENTCRAFT_HOME
      `- Backend       claude: src/agents/claude/  (Claude Agent SDK sessions)
+                      cursor: src/agents/cursor/  (Cursor SDK local agents)
                       sim:    src/agents/sim/     (deterministic scripted team, real git)
 ```
 
@@ -33,6 +34,9 @@ npm install
 npm run start -- --backend claude --repo C:\path\to\your\repo
 # personal use only: your local `claude` CLI login instead of an API key
 npm run start -- --backend claude --repo C:\path\to\your\repo --use-claude-login
+
+# Cursor agents: needs CURSOR_API_KEY (optional dependency @cursor/sdk)
+npm run start -- --backend cursor --repo C:\path\to\your\repo
 
 # simulated team on a fresh sandbox repo (no API calls) - for demos and screenshot QA
 npm run start -- --backend sim --reset --speed 2
@@ -71,7 +75,7 @@ most ~100 ms of state, and interrupted agent turns resume on the next start.
 
 | flag / env | default | |
 | --- | --- | --- |
-| `--backend sim\|claude` / `AGENTCRAFT_BACKEND` | `claude` | |
+| `--backend sim\|claude\|cursor` / `AGENTCRAFT_BACKEND` | `claude` | |
 | `--port` / `AGENTCRAFT_PORT` | `7878` | WebSocket port (127.0.0.1 only) |
 | `--home` / `AGENTCRAFT_HOME` | `~/.agentcraft` | state root |
 | `--user-name` / `AGENTCRAFT_USER_NAME` / config `userName` | OS user name | how the agents address you; sent to the mod in `foreman.status` |

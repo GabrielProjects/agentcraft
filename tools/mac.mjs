@@ -21,7 +21,7 @@ const runFile = (kind, profile) => path.join(runDir, `mac-${kind}-${profile}.jso
 
 function usage(code = 0) {
   console.log(`AgentCraft macOS launcher
-  node tools/mac.mjs launch [--backend sim|claude] [--repo PATH] [--use-claude-login]
+  node tools/mac.mjs launch [--backend sim|claude|cursor] [--repo PATH] [--use-claude-login]
                             [--home PATH] [--profile NAME] [--port N] [--dev-port N]
                             [--dev] [--showcase busy|late] [--reset]
                             [--no-game] [--no-foreman] [--no-wait]
@@ -57,7 +57,7 @@ function options(argv) {
     out.backend = 'sim';
     out.profile ??= out.showcase === 'late' ? 'showcase-late' : 'showcase';
   }
-  if (!['sim', 'claude'].includes(out.backend)) throw new Error('backend must be sim or claude');
+  if (!['sim', 'claude', 'cursor'].includes(out.backend)) throw new Error('backend must be sim, claude or cursor');
   out.profile ??= out.backend;
   if (!/^[\w-]+$/.test(out.profile)) throw new Error('profile must contain only letters, digits, _ or -');
   out.home = path.resolve(out.home ?? process.env.AGENTCRAFT_HOME ?? path.join(os.homedir(), '.agentcraft'));
@@ -188,6 +188,9 @@ async function launch(opt, summary) {
       for (const repo of opt.repo) console.log(runCli('foremancli.mjs', ['repo-add', repo, '--port', String(fmPort)]));
     } else {
       if (await portOpen(fmPort)) throw new Error(`port ${fmPort} is already in use`);
+      if (opt.backend === 'cursor' && !process.env.CURSOR_API_KEY) {
+        throw new Error('CURSOR_API_KEY is not set. Create a key at https://cursor.com/dashboard/integrations');
+      }
       installDeps(path.join(root, 'foreman'));
       const args = ['--import', 'tsx', 'src/main.ts', '--backend', opt.backend,
         '--profile', opt.profile, '--home', opt.home, '--port', String(fmPort)];

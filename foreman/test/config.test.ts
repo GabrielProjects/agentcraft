@@ -30,6 +30,20 @@ describe('loadConfig argument checking', () => {
     expect(cfg.sim.speed).toBe(2);
   });
 
+  it('accepts the cursor backend and defaults', () => {
+    const cfg = load(['--backend', 'cursor', '--workers', 'juniper,kit', '--model', 'auto']);
+    expect(cfg.backend).toBe('cursor');
+    expect(cfg.cursor.workers).toEqual(['juniper', 'kit']);
+    expect(cfg.cursor.leadModel).toBe('auto');
+    expect(cfg.cursor.workerModel).toBe('auto');
+    expect(cfg.notify).toBe(true);
+    expect(cfg.signMerges).toBe(true);
+  });
+
+  it('refuses an unknown backend', () => {
+    expect(() => load(['--backend', 'gpt'])).toThrow(/unknown backend "gpt"/);
+  });
+
   // regression: PowerShell `-File launch.ps1 -ForemanArgs '--workers,juniper,kit,--model,sonnet'` hands
   // the Foreman ONE argument; it used to be ignored silently and the team started on opus/medium/3 workers
   it('refuses an argument that PowerShell joined with commas', () => {

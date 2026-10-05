@@ -52,6 +52,21 @@ export interface SimConfig {
   ambient: boolean;
 }
 
+export interface CursorConfig {
+  leadModel: string;
+  workerModel: string;
+  /** max workers running a turn at the same time */
+  maxConcurrent: number;
+  /** worker ids in the team (subset of the cast) */
+  workers: string[];
+  /** test command for CI after a worker finishes (default: detect, e.g. `npm test`) */
+  ciCommand?: string;
+  /** resume interrupted sessions on Foreman start */
+  resumeOnStart: boolean;
+  /** lead reviews each finished task before the merge decision reaches the user */
+  leadReview: boolean;
+}
+
 export interface Config {
   backend: BackendName;
   /** the person the team works for (prompts, feed, UI); default: the OS user name */
@@ -80,6 +95,7 @@ export interface Config {
   /** sign approved merge commits when the repo's own git config says commit.gpgsign=true */
   signMerges: boolean;
   claude: ClaudeConfig;
+  cursor: CursorConfig;
   sim: SimConfig;
 }
 
@@ -174,11 +190,14 @@ export function loadConfig(argv: string[], env: NodeJS.ProcessEnv = process.env)
   const home = path.resolve(str(flags.home) ?? env.AGENTCRAFT_HOME ?? path.join(os.homedir(), '.agentcraft'));
   const file = readJson<Record<string, unknown>>(path.join(home, 'config.json')) ?? {};
   const fileClaude = (file.claude ?? {}) as Record<string, unknown>;
+  const fileCursor = (file.cursor ?? {}) as Record<string, unknown>;
   const fileSim = (file.sim ?? {}) as Record<string, unknown>;
   const pick = (k: string, envKey?: string): unknown => flags[k] ?? (envKey ? env[envKey] : undefined) ?? file[k];
 
   const backendRaw = String(pick('backend', 'AGENTCRAFT_BACKEND') ?? 'claude');
-  if (backendRaw !== 'sim' && backendRaw !== 'claude') throw new Error(`unknown backend "${backendRaw}" (use sim or claude)`);
+  if (backendRaw !== 'sim' && backendRaw !== 'claude' && backendRaw !== 'cursor') {
+    throw new Error(`unknown backend "${backendRaw}" (use sim, claude or cursor)`);
+  }
   const backend = backendRaw as BackendName;
   const profile = str(pick('profile', 'AGENTCRAFT_PROFILE')) ?? backend;
   if (!/^[a-zA-Z0-9_-]+$/.test(profile)) throw new Error(`bad profile name "${profile}"`);
@@ -188,7 +207,11 @@ export function loadConfig(argv: string[], env: NodeJS.ProcessEnv = process.env)
   if (typeof repoFlag === 'string') repos.push(...repoFlag.split(',').map((s) => s.trim()).filter(Boolean));
   else if (Array.isArray(file.repos)) repos.push(...(file.repos as string[]));
 
-  const workersRaw = str(flags.workers) ?? env.AGENTCRAFT_WORKERS ?? (fileClaude.workers as string[] | string | undefined);
+  const workersSource =
+    backend === 'cursor'
+      ? (fileCursor.workers as string[] | string | undefined)
+      : (fileClaude.workers as string[] | string | undefined);
+  const workersRaw = str(flags.workers) ?? env.AGENTCRAFT_WORKERS ?? workersSource;
   const workers = Array.isArray(workersRaw)
     ? workersRaw
     : typeof workersRaw === 'string'
@@ -198,6 +221,7 @@ export function loadConfig(argv: string[], env: NodeJS.ProcessEnv = process.env)
       : ['juniper', 'kit', 'wren'];
 
   const model = str(flags.model);
+  const liveBackend = backend === 'claude' || backend === 'cursor';
   const cfg: Config = {
     backend,
     userName: (str(pick('user-name', 'AGENTCRAFT_USER_NAME')) ?? str(file.userName))?.trim().slice(0, 40) || defaultUserName(),
@@ -210,7 +234,7 @@ export function loadConfig(argv: string[], env: NodeJS.ProcessEnv = process.env)
     goal: str(flags.goal),
     autostart: bool(flags.autostart, false) || !!str(flags.goal),
     reset: bool(flags.reset, false),
-    notify: bool(pick('notify', 'AGENTCRAFT_NOTIFY'), backend === 'claude'),
+    notify: bool(pick('notify', 'AGENTCRAFT_NOTIFY'), liveBackend),
     toastSilent: bool(pick('toast-silent', 'AGENTCRAFT_TOAST_SILENT'), false),
     debug: bool(pick('debug', 'AGENTCRAFT_DEBUG'), false),
     quiet: bool(flags.quiet, false),
@@ -219,7 +243,7 @@ export function loadConfig(argv: string[], env: NodeJS.ProcessEnv = process.env)
     repoPollMs: Math.max(500, num(pick('repo-poll-ms'), 10_000)),
     mergeStyle: mergeStyle(pick('merge-style', 'AGENTCRAFT_MERGE_STYLE')),
     // the sim answers merges unattended (screenshot QA, --auto-answer): never sign there
-    signMerges: bool(pick('sign-merges', 'AGENTCRAFT_SIGN_MERGES'), backend === 'claude'),
+    signMerges: bool(pick('sign-merges', 'AGENTCRAFT_SIGN_MERGES'), liveBackend),
     claude: {
       leadModel: str(flags['lead-model']) ?? model ?? str(env.AGENTCRAFT_LEAD_MODEL) ?? str(fileClaude.leadModel) ?? 'opus',
       workerModel: str(flags['worker-model']) ?? model ?? str(env.AGENTCRAFT_WORKER_MODEL) ?? str(fileClaude.workerModel) ?? 'sonnet',
@@ -234,6 +258,15 @@ export function loadConfig(argv: string[], env: NodeJS.ProcessEnv = process.env)
       resumeOnStart: bool(flags.resume ?? fileClaude.resumeOnStart, true),
       leadReview: bool(flags['lead-review'] ?? fileClaude.leadReview, true),
       useClaudeLogin: bool(flags['use-claude-login'] ?? env.AGENTCRAFT_USE_CLAUDE_LOGIN ?? fileClaude.useClaudeLogin, false),
+    },
+    cursor: {
+      leadModel: str(flags['lead-model']) ?? model ?? str(env.AGENTCRAFT_LEAD_MODEL) ?? str(fileCursor.leadModel) ?? 'auto',
+      workerModel: str(flags['worker-model']) ?? model ?? str(env.AGENTCRAFT_WORKER_MODEL) ?? str(fileCursor.workerModel) ?? 'auto',
+      maxConcurrent: Math.max(1, num(flags['max-concurrent'] ?? fileCursor.maxConcurrent, 3)),
+      workers,
+      ciCommand: str(flags.ci) ?? str(fileCursor.ciCommand),
+      resumeOnStart: bool(flags.resume ?? fileCursor.resumeOnStart, true),
+      leadReview: bool(flags['lead-review'] ?? fileCursor.leadReview, true),
     },
     sim: {
       speed: Math.max(0.05, num(flags.speed ?? env.AGENTCRAFT_SIM_SPEED ?? fileSim.speed, 1)),
@@ -252,7 +285,7 @@ export const HELP = `AgentCraft Foreman ${FOREMAN_VERSION}
 
 usage: npm run start -- [options]
 
-  --backend sim|claude     agent backend (default: claude)
+  --backend sim|claude|cursor  agent backend (default: claude)
   --repo <path>[,<path>]   register local git repo(s) at start (sim: defaults to a fresh sandbox/sim-demo)
   --goal "<text>"          submit a goal right away
   --port <n>               WebSocket port (default 7878, env AGENTCRAFT_PORT)
@@ -261,13 +294,13 @@ usage: npm run start -- [options]
                            env AGENTCRAFT_USER_NAME, config.json "userName")
   --profile <name>         state profile under home (default: backend name)
   --reset                  wipe this profile's state first (sim: also recreates the demo repo)
-  --notify / --no-notify   desktop notification when a decision waits (default: on for claude, off for sim)
+  --notify / --no-notify   desktop notification when a decision waits (default: on for claude/cursor, off for sim)
   --toast-silent           toasts without sound
   --repo-poll-ms <n>       how often repo checkouts are checked for head/dirty changes (default 10000)
   --merge-style merge|squash  approved merges: merge commit keeping the agents' commits (default),
                            or one squashed commit authored by you
   --no-sign-merges         never sign approved merge commits (default: signed when your git
-                           config has commit.gpgsign=true; claude backend only)
+                           config has commit.gpgsign=true; claude/cursor backends)
   --debug                  verbose logging
 
  sim backend
@@ -290,6 +323,16 @@ usage: npm run start -- [options]
   --workers <n|ids>        team size or comma list (default juniper,kit,wren)
   --max-concurrent <n>     workers running at once (default 3)
   --max-budget <usd>       per-turn USD cap
+  --ci "<cmd>"             test command run after each task (default: detected, e.g. npm test)
+  --no-lead-review         skip the lead's review turn before merge decisions
+  --no-resume              do not resume interrupted sessions on start
+
+ cursor backend
+  auth: CURSOR_API_KEY (from cursor.com/dashboard/integrations)
+  --model <m>              model id for lead and workers (default: auto; use Cursor.models.list)
+  --lead-model <m> / --worker-model <m>
+  --workers <n|ids>        team size or comma list (default juniper,kit,wren)
+  --max-concurrent <n>     workers running at once (default 3)
   --ci "<cmd>"             test command run after each task (default: detected, e.g. npm test)
   --no-lead-review         skip the lead's review turn before merge decisions
   --no-resume              do not resume interrupted sessions on start

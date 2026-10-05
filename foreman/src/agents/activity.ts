@@ -1,5 +1,5 @@
-// Map tool use -> agent state / station / nameplate activity. Shared by the sim and claude
-// backends so both drive the world the same way.
+// Map tool use -> agent state / station / nameplate activity. Shared by sim, claude, and cursor
+// backends so all drive the world the same way.
 //
 //   Read / Grep / Glob / LS       -> reading      @ library
 //   Edit / Write / MultiEdit      -> editing      @ desk
@@ -63,6 +63,7 @@ export function toolActivity(tool: string, input: Record<string, unknown>, cwd?:
     case 'Write':
       return { state: 'editing', station: 'desk', activity: `writing ${short(rel ?? 'a file')}`, label: `Write ${rel ?? ''}`.trim() };
     case 'Bash':
+    case 'Shell':
     case 'PowerShell': {
       const cmd = (str(input.command) ?? '').replace(/\s+/g, ' ').trim();
       if (TEST_CMD_RE.test(cmd)) return { state: 'testing', station: 'testbench', activity: `testing: ${cmd.slice(0, 32)}`, label: `$ ${cmd}` };

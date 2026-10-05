@@ -1,4 +1,4 @@
-// Foreman entry point: `npm run start -- --backend sim|claude [--repo <path>] [--speed N] ...`
+// Foreman entry point: `npm run start -- --backend sim|claude|cursor [--repo <path>] [--speed N] ...`
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -7,7 +7,7 @@ import { SimBackend } from './agents/sim/index.js';
 import { DEFAULT_SIM_GOAL } from './agents/sim/scenario.js';
 import { FOREMAN_VERSION, HELP, loadConfig, type Config } from './config.js';
 import { consoleLogger } from './context.js';
-import { Foreman } from './foreman.js';
+import { Foreman, type Backend } from './foreman.js';
 import { ForemanServer } from './server.js';
 import { claimRunFiles, homeRunFile, liveOwner, profileRunFile, releaseRunFiles } from './runfile.js';
 import { isInsideOrEqual } from './util/fsx.js';
@@ -25,6 +25,15 @@ function wipeProfile(cfg: Config): void {
     throw new Error(`refusing to wipe ${cfg.dataDir}`);
   }
   fs.rmSync(cfg.dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+}
+
+async function createBackend(foreman: Foreman, cfg: Config): Promise<Backend> {
+  if (cfg.backend === 'sim') return new SimBackend(foreman, cfg.sim);
+  if (cfg.backend === 'cursor') {
+    const { CursorBackend } = await import('./agents/cursor/index.js');
+    return new CursorBackend(foreman, cfg.cursor);
+  }
+  return new ClaudeBackend(foreman, cfg.claude);
 }
 
 export async function main(argv: string[]): Promise<void> {
@@ -61,7 +70,7 @@ export async function main(argv: string[]): Promise<void> {
   }
 
   const foreman = new Foreman({ config: cfg, logger: log });
-  const backend = cfg.backend === 'sim' ? new SimBackend(foreman, cfg.sim) : new ClaudeBackend(foreman, cfg.claude);
+  const backend = await createBackend(foreman, cfg);
   const server = new ForemanServer(foreman, { host: cfg.host, port: cfg.port, allowBrowserOrigins: cfg.allowBrowserOrigins, validateOutbound: cfg.debug, log });
 
   try {
